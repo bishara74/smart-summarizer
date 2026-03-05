@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartSummarizer</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            min-height: 100vh;
+            background: #0a0a0b;
+            font-family: 'DM Sans', sans-serif;
+        }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+
+        const API_BASE = "http://localhost:8000";
+
+        const STYLES = [
+            { id: "brief", label: "Brief", icon: "⚡", desc: "3-5 sentences, key points only" },
+            { id: "detailed", label: "Detailed", icon: "📋", desc: "Comprehensive, multi-paragraph" },
+            { id: "snarky", label: "Snarky", icon: "😏", desc: "Accurate but with attitude" },
+        ];
+
+        function App() {
+            const [mode, setMode] = useState("url");
+            const [url, setUrl] = useState("");
+            const [fileName, setFileName] = useState("");
+            const [file, setFile] = useState(null);
+            const [style, setStyle] = useState("brief");
+            const [pages, setPages] = useState("");
+            const [summary, setSummary] = useState("");
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState("");
+            const [elapsed, setElapsed] = useState(0);
+            const fileRef = useRef(null);
+            const timerRef = useRef(null);
+
+            useEffect(() => {
+                if (loading) {
+                    setElapsed(0);
+                    timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
+                } else {
+                    clearInterval(timerRef.current);
+                }
+                return () => clearInterval(timerRef.current);
+            }, [loading]);
+
+            const handleFile = (e) => {
+                const f = e.dataTransfer ? e.dataTransfer.files[0] : e.target.files[0];
+                if (f && f.name.toLowerCase().endsWith(".pdf")) {
+                    setFile(f);
+                    setFileName(f.name);
+                    setError("");
+                } else {
+                    setError("Please select a PDF file.");
+                }
+            };
+
+            const handleSubmit = async () => {
+                setError("");
+                setSummary("");
+                setLoading(true);
+                try {
+                    let res;
+                    if (mode === "url") {
+                        if (!url.trim()) throw new Error("Please enter a URL.");
+                        const params = new URLSearchParams({ url, style });
+                        res = await fetch(API_BASE + "/summarize/url?" + params);
+                    } else {
+                        if (!file) throw new Error("Please select a PDF file.");
+                        const formData = new FormData();
+                        formData.append("file", file);
+                        formData.append("style", style);
+                        if (pages.trim()) formData.append("pages", pages.trim());
+                        res = await fetch(API_BASE + "/summarize/pdf", { method: "POST", body: formData });
+                    }
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.detail || "Something went wrong.");
+                    setSummary(data.summary);
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const s = {
+                page: {
+                    minHeight: "100vh", background: "#0a0a0b", color: "#e8e6e3",
+                    display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 20px",
+                },
+                badge: {
+                    display: "inline-flex", alignItems: "center", gap: 10, marginBottom: 12,
+                    background: "linear-gradient(135deg, rgba(99,102,241,0.15), rgba(168,85,247,0.15))",
+                    border: "1px solid rgba(99,102,241,0.2)", borderRadius: 40, padding: "6px 16px",
+                    fontSize: 13, fontWeight: 500, color: "#a78bfa", letterSpacing: 0.5,
+                },
+                h1: {
+                    fontSize: 42, fontWeight: 700, margin: "8px 0 4px",
+                    background: "linear-gradient(135deg, #e8e6e3, #a78bfa)",
+                    WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", letterSpacing: -1,
+                },
+                card: {
+                    width: "100%", maxWidth: 620, background: "#141416",
+                    border: "1px solid #232328", borderRadius: 20, padding: 32,
+                    animation: "fadeUp 0.6s ease 0.1s both",
+                },
+                toggle: {
+                    display: "flex", background: "#1c1c21", borderRadius: 12, padding: 4, marginBottom: 28,
+                },
+                toggleBtn: (active) => ({
+                    flex: 1, padding: "10px 0", border: "none", borderRadius: 9,
+                    cursor: "pointer", fontSize: 14, fontWeight: 500, fontFamily: "inherit",
+                    transition: "all 0.2s",
+                    background: active ? "#2a2a32" : "transparent",
+                    color: active ? "#e8e6e3" : "#6b6b76",
+                    boxShadow: active ? "0 1px 4px rgba(0,0,0,0.3)" : "none",
+                }),
+                label: { display: "block", fontSize: 13, color: "#8b8b96", marginBottom: 8, fontWeight: 500 },
+                input: {
+                    width: "100%", padding: "12px 16px", background: "#1c1c21",
+                    border: "1px solid #2a2a32", borderRadius: 10, color: "#e8e6e3",
+                    fontSize: 14, outline: "none", fontFamily: "'JetBrains Mono', monospace",
+                    transition: "border 0.2s", boxSizing: "border-box",
+                },
+                dropzone: (hasFile) => ({
+                    border: "2px dashed", borderRadius: 12, padding: "28px 20px",
+                    textAlign: "center", cursor: "pointer", transition: "all 0.2s",
+                    background: hasFile ? "rgba(99,102,241,0.05)" : "transparent",
+                    borderColor: hasFile ? "rgba(99,102,241,0.3)" : "#2a2a32",
+                }),
+                styleBtn: (active) => ({
+                    flex: 1, padding: "12px 8px", borderRadius: 12, cursor: "pointer",
+                    textAlign: "center", transition: "all 0.2s", fontFamily: "inherit",
+                    border: "1px solid",
+                    background: active ? "rgba(99,102,241,0.1)" : "#1c1c21",
+                    borderColor: active ? "rgba(99,102,241,0.4)" : "#2a2a32",
+                }),
+                submitBtn: (isLoading) => ({
+                    width: "100%", padding: "14px 0", border: "none", borderRadius: 12,
+                    cursor: isLoading ? "wait" : "pointer", fontSize: 15, fontWeight: 600,
+                    fontFamily: "inherit", transition: "all 0.2s", letterSpacing: 0.3,
+                    background: isLoading
+                        ? "linear-gradient(135deg, #2a2a32, #1c1c21)"
+                        : "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                    color: isLoading ? "#6b6b76" : "#fff",
+                    boxShadow: isLoading ? "none" : "0 4px 20px rgba(99,102,241,0.3)",
+                }),
+                error: {
+                    marginTop: 16, padding: "12px 16px",
+                    background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
+                    borderRadius: 10, color: "#f87171", fontSize: 13, animation: "fadeUp 0.3s ease",
+                },
+                resultCard: {
+                    width: "100%", maxWidth: 620, marginTop: 24, background: "#141416",
+                    border: "1px solid #232328", borderRadius: 20, padding: 32,
+                    animation: "fadeUp 0.4s ease",
+                },
+                copyBtn: {
+                    background: "#1c1c21", border: "1px solid #2a2a32", borderRadius: 8,
+                    padding: "6px 14px", cursor: "pointer", fontSize: 12, fontWeight: 500,
+                    color: "#8b8b96", fontFamily: "inherit", transition: "all 0.2s",
+                },
+            };
+
+            return (
+                <div style={s.page}>
+                    {/* Header */}
+                    <div style={{ textAlign: "center", marginBottom: 48, animation: "fadeUp 0.6s ease" }}>
+                        <div style={s.badge}>
+                            <span style={{ animation: "float 3s ease-in-out infinite" }}>🧠</span>
+                            Powered by Groq · Llama 3.3 70B
+                        </div>
+                        <h1 style={s.h1}>SmartSummarizer</h1>
+                        <p style={{ color: "#6b6b76", fontSize: 15 }}>
+                            Drop a PDF or paste a URL — get an AI summary in seconds
+                        </p>
+                    </div>
+
+                    {/* Main Card */}
+                    <div style={s.card}>
+                        {/* Mode Toggle */}
+                        <div style={s.toggle}>
+                            <button style={s.toggleBtn(mode === "url")}
+                                onClick={() => { setMode("url"); setError(""); }}>
+                                🔗&nbsp; Web URL
+                            </button>
+                            <button style={s.toggleBtn(mode === "pdf")}
+                                onClick={() => { setMode("pdf"); setError(""); }}>
+                                📄&nbsp; PDF File
+                            </button>
+                        </div>
+
+                        {/* URL Input */}
+                        {mode === "url" && (
+                            <div style={{ marginBottom: 24 }}>
+                                <label style={s.label}>Website URL</label>
+                                <input
+                                    type="url" value={url}
+                                    onChange={e => setUrl(e.target.value)}
+                                    placeholder="https://en.wikipedia.org/wiki/..."
+                                    style={s.input}
+                                    onFocus={e => e.target.style.borderColor = "#6366f1"}
+                                    onBlur={e => e.target.style.borderColor = "#2a2a32"}
+                                    onKeyDown={e => e.key === "Enter" && handleSubmit()}
+                                />
+                            </div>
+                        )}
+
+                        {/* PDF Upload */}
+                        {mode === "pdf" && (
+                            <div style={{ marginBottom: 24 }}>
+                                <label style={s.label}>PDF File</label>
+                                <div
+                                    onClick={() => fileRef.current.click()}
+                                    onDrop={e => { e.preventDefault(); handleFile(e); }}
+                                    onDragOver={e => e.preventDefault()}
+                                    style={s.dropzone(!!fileName)}
+                                >
+                                    <input ref={fileRef} type="file" accept=".pdf"
+                                        onChange={handleFile} style={{ display: "none" }} />
+                                    {fileName ? (
+                                        <div>
+                                            <div style={{ fontSize: 28 }}>📄</div>
+                                            <p style={{ margin: "8px 0 0", color: "#a78bfa", fontSize: 14, fontWeight: 500 }}>{fileName}</p>
+                                            <p style={{ margin: "4px 0 0", color: "#6b6b76", fontSize: 12 }}>Click to change</p>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <div style={{ fontSize: 28 }}>☁️</div>
+                                            <p style={{ margin: "8px 0 0", color: "#8b8b96", fontSize: 14 }}>
+                                                Drop a PDF here or <span style={{ color: "#6366f1", fontWeight: 500 }}>browse</span>
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                                <div style={{ marginTop: 12 }}>
+                                    <label style={s.label}>Page range <span style={{ color: "#4b4b56" }}>(optional)</span></label>
+                                    <input
+                                        type="text" value={pages}
+                                        onChange={e => setPages(e.target.value)}
+                                        placeholder="e.g. 1-5"
+                                        style={{ ...s.input, width: 120, padding: "8px 12px", fontSize: 13 }}
+                                        onFocus={e => e.target.style.borderColor = "#6366f1"}
+                                        onBlur={e => e.target.style.borderColor = "#2a2a32"}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Style Picker */}
+                        <div style={{ marginBottom: 28 }}>
+                            <label style={s.label}>Summary Style</label>
+                            <div style={{ display: "flex", gap: 10 }}>
+                                {STYLES.map(st => (
+                                    <button key={st.id} onClick={() => setStyle(st.id)} style={s.styleBtn(style === st.id)}>
+                                        <div style={{ fontSize: 20, marginBottom: 4 }}>{st.icon}</div>
+                                        <div style={{
+                                            fontSize: 13, fontWeight: 600,
+                                            color: style === st.id ? "#a78bfa" : "#8b8b96",
+                                        }}>{st.label}</div>
+                                        <div style={{ fontSize: 11, color: "#4b4b56", marginTop: 2 }}>{st.desc}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Submit */}
+                        <button onClick={handleSubmit} disabled={loading} style={s.submitBtn(loading)}>
+                            {loading ? (
+                                <span>
+                                    <span style={{ animation: "pulse 1.5s infinite" }}>Summarizing</span>
+                                    <span style={{ color: "#8b8b96", fontSize: 13, marginLeft: 8 }}>{elapsed}s</span>
+                                </span>
+                            ) : "Summarize →"}
+                        </button>
+
+                        {/* Error */}
+                        {error && <div style={s.error}>{error}</div>}
+                    </div>
+
+                    {/* Summary Output */}
+                    {summary && (
+                        <div style={s.resultCard}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                                <h2 style={{ fontSize: 16, fontWeight: 600, color: "#a78bfa" }}>Summary</h2>
+                                <button
+                                    onClick={() => { navigator.clipboard.writeText(summary); }}
+                                    style={s.copyBtn}
+                                    onMouseEnter={e => { e.target.style.color = "#e8e6e3"; e.target.style.borderColor = "#6366f1"; }}
+                                    onMouseLeave={e => { e.target.style.color = "#8b8b96"; e.target.style.borderColor = "#2a2a32"; }}
+                                >📋 Copy</button>
+                            </div>
+                            <div style={{ fontSize: 14, lineHeight: 1.75, color: "#c4c3be", whiteSpace: "pre-wrap" }}>
+                                {summary}
+                            </div>
+                            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid #232328", fontSize: 12, color: "#4b4b56" }}>
+                                Generated in {elapsed}s · {summary.length} characters · Style: {style}
+                            </div>
+                        </div>
+                    )}
+
+                    <p style={{ marginTop: 40, fontSize: 12, color: "#3a3a42" }}>
+                        SmartSummarizer · Built with Python, Selenium, PyMuPDF & Groq
+                    </p>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+</body>
+</html>
