@@ -2,6 +2,8 @@
 
 A multi-source content summarizer that extracts text from **web pages** and **PDF files**, then generates AI-powered summaries using **Groq** (Llama 3.3 70B). Available as both a CLI tool and a web app.
 
+![SmartSummarizer Web UI](docs/screenshot.png)
+
 ## Features
 
 - **Web scraping** — extracts visible text from any URL using headless Chrome via Selenium
